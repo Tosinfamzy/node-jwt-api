@@ -1,5 +1,16 @@
 const User = require("../models/User");
+const jwt = require("jsonwebtoken");
 
+const token = async (req, res) => {
+  const accessToken = jwt.sign(
+    {
+      email: "test@test.com",
+    },
+    process.env.JWT_SECRET_KEY,
+    { expiresIn: process.env.ACCES_TOKEN_EXPIRY }
+  );
+  res.send(accessToken)
+};
 const test = async (req, res) => {
   try {
     const newUser = new User({
@@ -19,4 +30,4 @@ const test = async (req, res) => {
   }
 };
 
-module.exports = {test}
+module.exports = { test };
