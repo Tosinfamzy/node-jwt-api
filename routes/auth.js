@@ -10,5 +10,6 @@ router.get("/", [rateLimiter(1, 10), verifyToken], authController.test);
 
 router.post("/register", authController.register);
 router.post("/token", authController.token);
+router.post('/confirm',authController.confirmEmailToken)
 
 module.exports = router;

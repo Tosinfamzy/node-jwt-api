@@ -2,6 +2,7 @@ const User = require("../models/User");
 const { v4: uuidv4 } = require("uuid");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const nodemailer = require("nodemailer");
 
 const validation = require("../helpers/validation");
 const { options } = require("joi");
@@ -72,7 +73,10 @@ const register = async () => {
           },
         }
       );
-
+      await sendEmailConfirmation({
+        email: user.email,
+        emailToken: user.emailToken,
+      });
       res
         .status(200)
         .header()
@@ -144,4 +148,45 @@ const token = async (req, res) => {
   }
 };
 
-module.exports = { register, token };
+const confirmEmailToken = (req, res) => {
+  try {
+    const emailToken = req.body.emailToken;
+    if (email !== null) {
+      const accessToken = req.header("Authorization").split(" ")[1];
+      const decodedToken = jwt.verify(accessToken, process.env.JWT_SECRET_KEY);
+      const user = await User.findOne({ email: decodedToken.email });
+      if (!user.emailConfirmed && emailToken === user.emailToken) {
+        await User.updateOne(
+          { email: decodedToken.email },
+          { $set: { emailConfirmed: null, emailToken: null } }
+        );
+        res
+          .status(400)
+          .json({ success: { status: 200, message: "EMAIL_CONFIRM" } });
+      } else {
+        res.status(400).json({ status: 400, message: "BAD_REQUEST" });
+      }
+    }
+  } catch (error) {
+    res.status(400).json({ status: 400, message: "BAD_REQUEST" });
+  }
+};
+
+const sendEmailConfirmation = async (user) => {
+  const transport = nodemailer.createTransport({
+    host: process.env.MAIL_HOST,
+    port: process.env.MAIL_PORT,
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS,
+    },
+  });
+  const info = await transport.sendMail({
+    from: "test@test.com",
+    to: user.email,
+    subject: "Confirm your email",
+    text: `Confirm your email at http://localhost${process.env.PORT}/confirm-email/${user.emailToken}`,
+  });
+};
+
+module.exports = { register, token, confirmEmailToken };
