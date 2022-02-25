@@ -1,15 +1,16 @@
 require("dotenv").config();
 
 const express = require("express");
+
 const app = express();
 const port = 3000;
 const mongoose = require("mongoose");
 
-app.use(express.json())
+app.use(express.json());
 
-const authRoutes = require('./routes/auth')
+const authRoutes = require("./routes/auth");
 
-app.use('/api/auth', authRoutes)
+app.use("/api/auth", authRoutes);
 
 mongoose
   .connect(

@@ -1,7 +1,7 @@
 const User = require("../models/User");
-const jwt = require("jsonwebtoken");
-const bcrypt = require("bcrypt");
 const { v4: uuidv4 } = require("uuid");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 
 const validation = require("../helpers/validation");
 const { options } = require("joi");
@@ -50,17 +50,20 @@ const register = async () => {
         }
       );
 
-      res.status(200).header().json({
-        success: {
-          status: 200,
-          message: 'REGISTTRATION_SUCCESSFUL',
-          accessToken: accessToken,
-          user: {
-            id: user.id,
-            email: user.email
-          }
-        }
-      })
+      res
+        .status(200)
+        .header()
+        .json({
+          success: {
+            status: 200,
+            message: "REGISTTRATION_SUCCESSFUL",
+            accessToken: accessToken,
+            user: {
+              id: user.id,
+              email: user.email,
+            },
+          },
+        });
     }
   } catch (error) {
     let errorMessage;
@@ -72,23 +75,5 @@ const register = async () => {
     res.status(400).json({ status: 400, message: errorMessage });
   }
 };
-const test = async (req, res) => {
-  try {
-    const newUser = new User({
-      email: "test@test.com",
-      password: "test",
-      emailConfirmed: false,
-      emailToken: "test",
-      security: {
-        tokens: null,
-        passwordReset: null,
-      },
-    });
-    await newUser.save();
-    res.send(newUser);
-  } catch (error) {
-    res.send(error);
-  }
-};
 
-module.exports = { test, register };
+module.exports = { register };
