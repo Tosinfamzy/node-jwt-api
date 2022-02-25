@@ -9,3 +9,6 @@ This is a WIP for a simple(ish) Template I'll be using for my tiny JS backend pr
 - JWT Integration with login and logout functionality(WIP)
 - Email/Password reset(WIP)
 - Unit tests(Thinking about it)
+
+## DEV Refactoring notes (TODOs)
+- Better/Centralised error handling 

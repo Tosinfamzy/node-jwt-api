@@ -49,6 +49,29 @@ const register = async () => {
           expiresIn: process.env.ACCES_TOKEN_EXPIRY,
         }
       );
+      //TODO: Should probably break to a generateRefreshToken function
+      const refreshToken = jwt.sign(
+        {
+          _id: user.id,
+          email: user.email,
+        },
+        process.env.REFRESH_TOKEN_SECRET_KEY,
+        {
+          expiresIn: process.env.REFRESH_TOKEN_EXPIRY,
+        }
+      );
+
+      await User.updateOne(
+        { email: user.email },
+        {
+          $push: {
+            "security.tokens": {
+              refreshToken: refreshToken,
+              createdAt: new Date(),
+            },
+          },
+        }
+      );
 
       res
         .status(200)
@@ -58,6 +81,7 @@ const register = async () => {
             status: 200,
             message: "REGISTTRATION_SUCCESSFUL",
             accessToken: accessToken,
+            refreshToken: refreshToken,
             user: {
               id: user.id,
               email: user.email,
@@ -76,4 +100,48 @@ const register = async () => {
   }
 };
 
-module.exports = { register };
+const token = async (req, res) => {
+  try {
+    const refreshToken = req.body.refreshToken;
+    try {
+      const decodeRefreshToken = jwt.verify(
+        refreshToken,
+        process.env.REFRESH_TOKEN_SECRET_KEY
+      );
+      const user = await User.findOne({ email: decodeRefreshToken.email });
+      const currentRefreshTokens = user.security.tokens;
+      if (
+        currentRefreshTokens.some(
+          (token) => token.refreshToken === refreshToken
+        )
+      ) {
+        const accessToken = jwt.sign(
+          {
+            _id: user.id,
+            email: user.email,
+          },
+          process.env.JWT_SECRET_KEY,
+          {
+            expiresIn: process.env.ACCES_TOKEN_EXPIRY,
+          }
+        );
+
+        res.status().json({
+          success: {
+            status: 200,
+            message: "ACCESS_TOKEN_GENERATED",
+            accessToken: accessToken,
+          },
+        });
+      } else {
+        res.status(401).json({ status: 401, message: "INVALID_REQUEST_TOKEN" });
+      }
+    } catch (error) {
+      res.status(401).json({ status: 401, message: "INVALID_REQUEST_TOKEN" });
+    } // Trycatch in another trycatch...IKR
+  } catch (error) {
+    res.status(400).json({ status: 400, message: "BAD_REQUEST" });
+  }
+};
+
+module.exports = { register, token };
