@@ -7,9 +7,63 @@ const nodemailer = require("nodemailer");
 const validation = require("../helpers/validation");
 const { options } = require("joi");
 
+const login = async (req, res) => {
+  try {
+    const { error } = validation.loginSchema.validate(req.body, {
+      abortEarly: false,
+    });
+    if (error) {
+      res.status(400).json({
+        status: 400,
+        message: "INPUT_ERRORS",
+        errors: error.details,
+        original: error._original,
+      });
+    } else {
+      const user = User.findOne({ email: req.body.email });
+      if (user) {
+        const validatePassword = await bcrypt.compare(
+          req.body.password,
+          user.password
+        );
+        if (validatePassword) {
+          const accessToken = jwt.sign(
+            {
+              _id: user.id,
+              email: user.email,
+            },
+            process.env.JWT_SECRET_KEY,
+            {
+              expiresIn: process.env.ACCES_TOKEN_EXPIRY,
+            }
+          );
+          //TODO: Should probably break to a generateRefreshToken function
+          const refreshToken = jwt.sign(
+            {
+              _id: user.id,
+              email: user.email,
+            },
+            process.env.REFRESH_TOKEN_SECRET_KEY,
+            {
+              expiresIn: process.env.REFRESH_TOKEN_EXPIRY,
+            }
+          );
+          if (await addRefreshToken(user,refreshToken)) {
+            res.status(200).json({status: 200, message: 'LOGIN_SUCCESS', accessToken: accessToken, refreshToken: refreshToken})
+          } else {
+            res.status(500).json({status: 500, message: 'SERVER_ERROR'})
+          }
+        }
+      }
+    }
+  } catch (error) {
+    res.status(400).json({ status: 400, message: "BAD_REQUEST" });
+  }
+};
+
 const register = async () => {
   try {
-    const error = validation.registerSchema.validate(req.body, {
+    const { error } = validation.registerSchema.validate(req.body, {
       abortEarly: false,
     });
     if (error) {
@@ -189,4 +243,48 @@ const sendEmailConfirmation = async (user) => {
   });
 };
 
-module.exports = { register, token, confirmEmailToken };
+const addRefreshToken = async (user, refreshToken) => {
+  try {
+    const existingRefreshTokens = user.security.tokens;
+    if (existingRefreshTokens.length < 5) {
+      await User.updateOne(
+        { email: user.email },
+        {
+          $push: {
+            "security.tokens": {
+              refreshToken: refreshToken,
+              createdAt: new Date(),
+            },
+          },
+        }
+      );
+    } else {
+      await User.updateOne(
+        { email: user.email },
+        {
+          $pull: {
+            "security.tokens": {
+              _id: existingRefreshTokens[0]._id,
+            },
+          },
+        }
+      ); // pop one off the array and insert the new token
+      await User.updateOne(
+        { email: user.email },
+        {
+          $push: {
+            "security.tokens": {
+              refreshToken: refreshToken,
+              createdAt: new Date(),
+            },
+          },
+        }
+      );
+    }
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+module.exports = { register, token, confirmEmailToken, login };
