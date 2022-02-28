@@ -45,6 +45,20 @@ const userSchema = mongoose.Schema({
       type: Date,
       default: null,
     },
+    changeEmail: {
+      token: {
+        type: String,
+        default: null,
+      },
+      provisionalEmail: {
+        type: String,
+        default: null,
+      },
+      expiry: {
+        type: Date,
+        default: null,
+      },
+    },
   },
 });
 

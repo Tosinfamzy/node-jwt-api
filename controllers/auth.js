@@ -319,6 +319,116 @@ const resetPassword = async (req, res) => {
   }
 };
 
+const changeEmail = (req, res) => {
+  try {
+    if (validation.emailSchema.validate({ email: req.body.provisionalEmail })) {
+      const accessToken = req.header("Authorization").split(" ")[1];
+      const decodeAccessToken = jwt.verify(
+        accessToken,
+        process.env.SECRET_ACCESS_TOKEN
+      );
+
+      const emailExistsCheck = await User.findOne({
+        email: req.body.provisionalEmail,
+      });
+
+      if (!emailExistsCheck) {
+        const changeEmailToken = uuidv4();
+        const expiresIn = moment().add(10, "m").toISOString();
+
+        const user = await User.findOneAndUpdate(
+          { email: decodeAccessToken.email },
+          {
+            $set: {
+              "security.changeEmail": {
+                token: changeEmailToken,
+                provisionalEmail: req.body.provisionalEmail,
+                expiry: expiresIn,
+              },
+            },
+          }
+        );
+
+        await sendChangeEmailConfirmation({
+          email: user.email,
+          emailToken: changeEmailToken,
+        });
+
+        res
+          .status(200)
+          .json({ success: { status: 200, message: "CHANGE_EMAIL_SENT" } });
+      } else {
+        res
+          .status(400)
+          .json({ error: { status: 400, message: "EMAIL_USER_REGISTERED" } });
+      }
+    } else {
+      res.status(400).json({ error: { status: 400, message: "EMAIL_INPUT" } });
+    }
+  } catch (error) {}
+};
+
+const changeEmailConfirm = async (req, res) => {
+  try {
+    const accessToken = req.header("Authorization").split(" ")[1];
+    const decodedAccessToken = jwt.verify(
+      accessToken,
+      process.env.SECRET_ACCESS_TOKEN
+    );
+
+    const user = await User.findOne({ email: decodedAccessToken.email });
+
+    const emailExistsCheck = await User.findOne({
+      email: user.security.changeEmail.provisionalEmail,
+    });
+
+    if (!emailExistsCheck) {
+      if (user.security.changeEmail.token === req.body.changeEmailToken) {
+        if (
+          new Date().getTime() <=
+          new Date(user.security.changeEmail.expiry).getTime()
+        ) {
+          await User.updateOne(
+            { email: decodedAccessToken.email },
+            {
+              $set: {
+                email: user.security.changeEmail.provisionalEmail,
+                "security.changeEmail.token": null,
+                "security.changeEmail.provisionalEmail": null,
+                "security.changeEmail.expiry": null,
+              },
+            }
+          );
+          res.status(200).json({
+            success: { status: 200, message: "CHANGE_EMAIL_SUCCESS" },
+          });
+        } else {
+          res.status(401).json({
+            success: { status: 401, message: "CHANGE_EMAIL_TOKEN_EXPIRED" },
+          });
+        }
+      } else {
+        res.status(401).json({
+          success: { status: 401, message: "INVALID_CHANGE_EMAIL_TOKEN" },
+        });
+      }
+    } else {
+      await User.updateOne(
+        { email: decodedAccessToken.email },
+        {
+          $set: {
+            "security.changeEmail.token": null,
+            "security.changeEmail.provisionalEmail": null,
+            "security.changeEmail.expiry": null,
+          },
+        }
+      );
+    }
+  } catch (err) {
+    res.status(400).json({ error: { status: 400, message: "BAD_REQUEST" } });
+  }
+};
+
 const addRefreshToken = async (user, refreshToken) => {
   try {
     const existingRefreshTokens = user.security.tokens;
@@ -378,7 +488,7 @@ const sendEmailConfirmation = async (user) => {
     from: "test@test.com",
     to: user.email,
     subject: "Confirm your email",
-    text: `Confirm your email at http://localhost${process.env.PORT}/confirm-email/${user.emailToken}`,
+    text: `Confirm your email at http://localhost:${process.env.PORT}/confirm-email/${user.emailToken}`,
   });
 };
 
@@ -396,15 +506,31 @@ const sendResetPasswordEmailConfirmation = async (user) => {
     from: "test@test.com",
     to: user.email,
     subject: "Confirm your password reset",
-    text: `Confirm your password reset at http://localhost${process.env.PORT}/confirm-password/${user.resetToken}`,
+    text: `Confirm your password reset at http://localhost:${process.env.PORT}/confirm-password/${user.resetToken}`,
   });
 };
 
-const health = (req,res) =>{
-  res
-  .status(200)
-  .json({ status: 200, message: "API_WORKING_FINE" });
-}
+const sendChangeEmailConfirmation = async (user) => {
+  const transport = nodemailer.createTransport({
+    host: process.env.NODEMAILER_HOST,
+    port: process.env.NODEMAILER_PORT,
+    auth: {
+      user: process.env.NODEMAILER_USER,
+      pass: process.env.NODEMAILER_PASS,
+    },
+  });
+
+  const info = await transport.sendMail({
+    from: "test@test.com",
+    to: user.email,
+    subject: "Confirm Your Email",
+    text: `Click the link to confirm your new email change: http://localhost:${process.env.PORT}/confirm-email-change/${user.emailToken}`,
+  });
+};
+
+const health = (req, res) => {
+  res.status(200).json({ status: 200, message: "API_WORKING_FINE" });
+};
 module.exports = {
   register,
   token,
@@ -412,5 +538,7 @@ module.exports = {
   login,
   resetPassword,
   confirmPasswordReset,
-  health
+  health,
+  changeEmail,
+  changeEmailConfirm,
 };

@@ -14,4 +14,6 @@ router.post("/confirm", verifyToken, authController.confirmEmailToken);
 router.post("/login", authController.login);
 router.post("/login", authController.resetPassword);
 router.post("/login", authController.confirmPasswordReset);
+router.post('/changeEmail', verifyToken, authController.changeEmail);
+router.post('/changeEmailConfirm', verifyToken, authController.changeEmailConfirm);
 module.exports = router;

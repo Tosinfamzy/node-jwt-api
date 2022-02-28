@@ -2,12 +2,22 @@
 
 This is a WIP for a simple(ish) Template I'll be using for my tiny JS backend projects
 
+## Feel free to use 
+```
+npm i
+```
+Rename .env.example to .env and populate the variables
+
+```
+npm run dev
+```
+
 ## Features
 - Some good folder structuring (Debatable)
 - Mongodb integration option (DONE)
 - Rate Limiter (DONE)
-- JWT Integration with login and logout functionality(WIP)
-- Email/Password reset(WIP)
+- JWT Integration with login and logout functionality(DONE)
+- Email/Password reset(DONE)
 - Unit tests(Thinking about it)
 
 ## DEV Refactoring notes (TODOs)
