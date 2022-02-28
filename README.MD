@@ -13,3 +13,4 @@ This is a WIP for a simple(ish) Template I'll be using for my tiny JS backend pr
 ## DEV Refactoring notes (TODOs)
 - Better/Centralised error handling 
 - A logger would be nice
+- Swagger or some open api implementation

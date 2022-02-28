@@ -6,6 +6,7 @@ const nodemailer = require("nodemailer");
 
 const validation = require("../helpers/validation");
 const { options } = require("joi");
+const moment = require("moment");
 
 const login = async (req, res) => {
   try {
@@ -48,12 +49,21 @@ const login = async (req, res) => {
               expiresIn: process.env.REFRESH_TOKEN_EXPIRY,
             }
           );
-          if (await addRefreshToken(user,refreshToken)) {
-            res.status(200).json({status: 200, message: 'LOGIN_SUCCESS', accessToken: accessToken, refreshToken: refreshToken})
+          if (await addRefreshToken(user, refreshToken)) {
+            res.status(200).json({
+              status: 200,
+              message: "LOGIN_SUCCESS",
+              accessToken: accessToken,
+              refreshToken: refreshToken,
+            });
           } else {
-            res.status(500).json({status: 500, message: 'SERVER_ERROR'})
+            res.status(500).json({ status: 500, message: "SERVER_ERROR" });
           }
+        } else {
+          res.status(403).json({ status: 403, message: "INVALID_PASSWORD" });
         }
+      } else {
+        res.status(403).json({ status: 403, message: "INVALID_PASSWORD" });
       }
     }
   } catch (error) {
@@ -202,7 +212,7 @@ const token = async (req, res) => {
   }
 };
 
-const confirmEmailToken = (req, res) => {
+const confirmEmailToken = async (req, res) => {
   try {
     const emailToken = req.body.emailToken;
     if (email !== null) {
@@ -225,22 +235,88 @@ const confirmEmailToken = (req, res) => {
     res.status(400).json({ status: 400, message: "BAD_REQUEST" });
   }
 };
+const confirmPasswordReset = async (req, res) => {
+  try {
+    const user = User.findOne({ email: req.body.email });
 
-const sendEmailConfirmation = async (user) => {
-  const transport = nodemailer.createTransport({
-    host: process.env.MAIL_HOST,
-    port: process.env.MAIL_PORT,
-    auth: {
-      user: process.env.MAIL_USER,
-      pass: process.env.MAIL_PASS,
-    },
-  });
-  const info = await transport.sendMail({
-    from: "test@test.com",
-    to: user.email,
-    subject: "Confirm your email",
-    text: `Confirm your email at http://localhost${process.env.PORT}/confirm-email/${user.emailToken}`,
-  });
+    if (
+      user.security.passwordReset.token === req.body.resetTokenn &&
+      new Date().getTime <=
+        new Date(user.security.passwordReset.expiry).getTime()
+    ) {
+      await User.updateOne(
+        { email: req.body.email },
+        {
+          $set: {
+            password: user.security.passwordReset.provisionalPassword,
+            "security.passwordReset.token": null,
+            "security.passwordReset.provisionalPassword": null,
+            "security.passwordReset.expiry": null,
+          },
+        }
+      );
+      res
+        .status(200)
+        .json({ status: 200, message: "PASSWORD_RESET_SUCCESSFUL" });
+    } else {
+      await User.updateOne(
+        { email: req.body.email },
+        {
+          $set: {
+            "security.passwordReset.token": null,
+            "security.passwordReset.provisionalPassword": null,
+            "security.passwordReset.expiry": null,
+          },
+        }
+      );
+      res
+        .status(401)
+        .json({ status: 401, message: "PASSWORD_RESET_TOKEN_EXPIRED" });
+    }
+  } catch (error) {
+    res.status(400).json({ status: 400, message: "BAD_REQUEST" });
+  }
+};
+const resetPassword = async (req, res) => {
+  try {
+    if (
+      req.body.provisionalPassword >= 6 &&
+      req.body.provisionalPassword < 255
+    ) {
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(
+        req.body.provisionalPassword,
+        salt
+      );
+
+      const resetToken = uuidv4();
+      const expiresIn = moment().add(10, "m").toISOString();
+
+      const user = await User.findOneAndUpdate(
+        { email: req.body.email },
+        {
+          $set: {
+            "security.passwordReset": {
+              token: resetToken,
+              provisionalPassword: hashedPassword,
+              expiry: expiresIn,
+            },
+          },
+        }
+      );
+      await sendResetPasswordEmailConfirmation({
+        email: req.body.email,
+        resetToken: resetToken,
+      });
+      res
+        .status(200)
+        .json({ status: 200, message: "PASSWORD_RESET_EMAIL_SENT" });
+    } else {
+      res.status(400).json({ status: 400, message: "PASSWORD_INPUT_ERROR" });
+    }
+  } catch (error) {
+    res.status(400).json({ status: 400, message: "BAD_REQUEST" });
+  }
 };
 
 const addRefreshToken = async (user, refreshToken) => {
@@ -287,4 +363,54 @@ const addRefreshToken = async (user, refreshToken) => {
   }
 };
 
-module.exports = { register, token, confirmEmailToken, login };
+const sendEmailConfirmation = async (user) => {
+  // Could do with a more explicit name or one flexible email function
+  const transport = nodemailer.createTransport({
+    // Could do with some refactoring as well
+    host: process.env.MAIL_HOST,
+    port: process.env.MAIL_PORT,
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS,
+    },
+  });
+  const info = await transport.sendMail({
+    from: "test@test.com",
+    to: user.email,
+    subject: "Confirm your email",
+    text: `Confirm your email at http://localhost${process.env.PORT}/confirm-email/${user.emailToken}`,
+  });
+};
+
+const sendResetPasswordEmailConfirmation = async (user) => {
+  const transport = nodemailer.createTransport({
+    // IKR DRY
+    host: process.env.MAIL_HOST,
+    port: process.env.MAIL_PORT,
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS,
+    },
+  });
+  const info = await transport.sendMail({
+    from: "test@test.com",
+    to: user.email,
+    subject: "Confirm your password reset",
+    text: `Confirm your password reset at http://localhost${process.env.PORT}/confirm-password/${user.resetToken}`,
+  });
+};
+
+const health = (req,res) =>{
+  res
+  .status(200)
+  .json({ status: 200, message: "API_WORKING_FINE" });
+}
+module.exports = {
+  register,
+  token,
+  confirmEmailToken,
+  login,
+  resetPassword,
+  confirmPasswordReset,
+  health
+};
